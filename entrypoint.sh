@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Path to the configuration file (exists because of previous function).
+config_file="/data/wg-dashboard.ini"
+
 echo "------------------------- START ----------------------------"
 echo "Starting the WireGuard Dashboard Docker container."
 
@@ -8,25 +11,28 @@ ensure_installation() {
   echo "Quick-installing..."
 
   [ ! -d "/data/db" ] && echo "Creating database dir" && mkdir /data/db
+  #[ ! -h "${WGDASH}/src/db" ] && echo "Looks like the db directory is not a symlink, relinking." && rm -rf "${WGDASH}/src/wg-dashboard.ini"
   ln -s /data/db "${WGDASH}/src/db"
-
-  [ ! -f "/data/wg-dashboard.ini" ] && echo "Creating wg-dashboard.ini file" && touch /data/wg-dashboard.ini
-  ln -s /data/wg-dashboard.ini "${WGDASH}/src/wg-dashboard.ini"
+  
+  [ ! -f "${config_file}" ] && echo "Creating wg-dashboard.ini file" && touch "${config_file}"
+  #[ ! -h "${WGDASH}/src/wg-dashboard.ini" ] && echo "Looks like the wg-dashboard.ini file is not a symlink, relinking." && rm -f "${WGDASH}/src/wg-dashboard.ini"
+  ln -s "${config_file}" "${WGDASH}/src/wg-dashboard.ini"
 
   python3 -m venv "${WGDASH}"/src/venv
   . "${WGDASH}/src/venv/bin/activate"
 
-
-
-  [ ! -d "${WGDASH}/src/venv/lib/python3.12/site-packages/psutil" ] && echo "Moving PIP dependency: psutil" && mv /usr/lib/python3.12/site-packages/psutil* "${WGDASH}"/src/venv/lib/python3.12/site-packages
-  [ ! -d "${WGDASH}/src/venv/lib/python3.12/site-packages/bcrypt" ] && echo "Moving PIP dependency: bcrypt" && mv /usr/lib/python3.12/site-packages/bcrypt* "${WGDASH}"/src/venv/lib/python3.12/site-packages
+  echo "Moving PIP dependency from ephemerality to runtime environment: psutil"
+  mv /usr/lib/python3.12/site-packages/psutil* "${WGDASH}"/src/venv/lib/python3.12/site-packages
+  
+  echo "Moving PIP dependency from ephemerality to runtime environment: bcrypt"
+  mv /usr/lib/python3.12/site-packages/bcrypt* "${WGDASH}"/src/venv/lib/python3.12/site-packages
 
 
   chmod +x "${WGDASH}"/src/wgd.sh
   cd "${WGDASH}"/src || exit
   ./wgd.sh install
 
-  echo "Looks like the installation succeeded."
+  echo "Looks like the installation succeeded. Moving on."
 
   # This first step is to ensure the wg0.conf file exists, and if not, then its copied over from the ephemeral container storage.
   # This is done so WGDashboard it works out of the box
@@ -50,11 +56,8 @@ ensure_installation() {
 set_envvars() {
   printf "\n------------- SETTING ENVIRONMENT VARIABLES ----------------\n"
 
-  # Path to the configuration file (exists because of previous function).
-  local config_file="/opt/wireguarddashboard/src/wg-dashboard.ini"
-
   # Check if the file is empty
-  if [ ! -s "$config_file" ]; then
+  if [ ! -s "${config_file}" ]; then
     echo "Config file is empty. Creating [Peers] section."
     
     # Create [Peers] section with initial values
@@ -62,40 +65,32 @@ set_envvars() {
       echo "[Peers]"
       echo "remote_endpoint = ${public_ip}"
       echo "peer_global_dns = ${global_dns}"
-    } > "$config_file"
+    } > "${config_file}"
 
   else
     echo "Config file is not empty, enforcing environment variables."
-
-    # Check and update the DNS if it has changed
-    current_dns=$(grep "peer_global_dns = " "$config_file" | awk '{print $NF}')
-    if [ "${global_dns}" != "$current_dns" ]; then
-      echo "Changing default DNS."
-      sed -i "s/^peer_global_dns = .*/peer_global_dns = ${global_dns}/" "$config_file"
-    else
-      echo "DNS is set correctly."
-    fi
-
-    # Determine the public IP and update if necessary
-    echo "{$public_ip}"
-
-    if [ "${public_ip}" = "0.0.0.0" ]; then
-      default_ip=$(curl -s ifconfig.me)
-
-      echo "Trying to fetch the Public-IP using ifconfig.me: ${default_ip}"
-      sed -i "s/^remote_endpoint = .*/remote_endpoint = ${default_ip}/" "$config_file"
-    else
-      current_ip=$(grep "remote_endpoint = " "$config_file" | awk '{print $NF}')
-    
-      if [ "${public_ip}" != "$current_ip" ]; then
-        echo "Setting the Public-IP using given variable: ${public_ip}"
-
-        sed -i "s/^remote_endpoint = .*/remote_endpoint = ${public_ip}/" "$config_file"
-      fi
-
-    fi
-
   fi
+
+  echo "Verifying current created variables..."
+
+  # Check and update the DNS if it has changed
+  current_dns=$(grep "peer_global_dns = " "${config_file}" | awk '{print $NF}')
+  if [ "${global_dns}" != "$current_dns" ] && [ "${global_dns}" != "0.0.0.0" ]; then
+
+    echo "Changing default DNS."
+    sed -i "s/^peer_global_dns = .*/peer_global_dns = ${global_dns}/" "${config_file}"
+
+  elif [ "${current_dns}" == "0.0.0.0" ] && [ "${global_dns}" == "0.0.0.0" ]; then
+
+    default_ip=$(curl -s ifconfig.me)
+
+    echo "Trying to fetch the Public-IP using ifconfig.me: ${default_ip}"
+    sed -i "s/^remote_endpoint = .*/remote_endpoint = ${default_ip}/" "${config_file}"
+
+  else
+    echo "DNS is correct, leaving it."
+  fi
+
 }
 
 # === CORE SERVICES ===
