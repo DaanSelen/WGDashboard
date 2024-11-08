@@ -10,13 +10,23 @@ ensure_installation() {
   # When using a custom directory to store the files, this part moves over and makes sure the installation continues.
   echo "Quick-installing..."
 
-  [ ! -d "/data/db" ] && echo "Creating database dir" && mkdir /data/db
-  #[ ! -h "${WGDASH}/src/db" ] && echo "Looks like the db directory is not a symlink, relinking." && rm -rf "${WGDASH}/src/wg-dashboard.ini"
-  ln -s /data/db "${WGDASH}/src/db"
+  if [ ! -d "/data/db" ]; then
+    echo "Creating database dir"
+    mkdir /data/db
+  fi
+
+  if [ ! -d "${WGDASH}/src/db" ]; then
+    ln -s /data/db "${WGDASH}/src/db"
+  fi
   
-  [ ! -f "${config_file}" ] && echo "Creating wg-dashboard.ini file" && touch "${config_file}"
-  #[ ! -h "${WGDASH}/src/wg-dashboard.ini" ] && echo "Looks like the wg-dashboard.ini file is not a symlink, relinking." && rm -f "${WGDASH}/src/wg-dashboard.ini"
-  ln -s "${config_file}" "${WGDASH}/src/wg-dashboard.ini"
+  if [ ! -f "${config_file}" ]; then
+    echo "Creating wg-dashboard.ini file"
+    touch "${config_file}"
+  fi
+
+  if [ ! -f "${WGDASH}/src/wg-dashboard.ini" ]; then
+    ln -s "${config_file}" "${WGDASH}/src/wg-dashboard.ini"
+  fi
 
   python3 -m venv "${WGDASH}"/src/venv
   . "${WGDASH}/src/venv/bin/activate"
@@ -63,24 +73,28 @@ set_envvars() {
     # Create [Peers] section with initial values
     {
       echo "[Peers]"
-      echo "remote_endpoint = ${public_ip}"
       echo "peer_global_dns = ${global_dns}"
+      echo "remote_endpoint = ${public_ip}"
+      #echo -e "\n[Server]"
     } > "${config_file}"
 
   else
-    echo "Config file is not empty, enforcing environment variables."
+    echo "Config file is not empty, using pre-existing."
   fi
 
-  echo "Verifying current created variables..."
+  echo "Verifying current variables..."
 
   # Check and update the DNS if it has changed
   current_dns=$(grep "peer_global_dns = " "${config_file}" | awk '{print $NF}')
-  if [ "${global_dns}" != "$current_dns" ] && [ "${global_dns}" != "0.0.0.0" ]; then
-
-    echo "Changing default DNS."
+  if [ "${global_dns}" == "$current_dns" ]; then
+    echo "DNS is correct, moving on."
+    
+  else
+    echo "Changing default DNS..."
     sed -i "s/^peer_global_dns = .*/peer_global_dns = ${global_dns}/" "${config_file}"
+  fi
 
-  elif [ "${current_dns}" == "0.0.0.0" ] && [ "${global_dns}" == "0.0.0.0" ]; then
+  if [ "${public_ip}" == "0.0.0.0" ]; then
 
     default_ip=$(curl -s ifconfig.me)
 
@@ -88,7 +102,7 @@ set_envvars() {
     sed -i "s/^remote_endpoint = .*/remote_endpoint = ${default_ip}/" "${config_file}"
 
   else
-    echo "DNS is correct, leaving it."
+    echo "Public-IP is correct, moving on."
   fi
 
 }
@@ -135,13 +149,16 @@ start_core() {
   done
 
   # Isolating the matches.
+  noneFound=0
+
   for interface in "${do_isolate[@]}"; do
 
     if [ "$interface" = "none" ] || [ "$interface" = "" ]; then
-      echo "Found: $interface, stopping isolation checking."
+      echo "Found none, stopping isolation checking."
+      noneFound=1
       break
-    else
 
+    else
 
       if [ ! -f "/etc/wireguard/${interface}.conf" ]; then
         echo "Ignoring ${interface}"
@@ -171,12 +188,13 @@ start_core() {
 
 
   for interface in "${non_isolate[@]}"; do
-    if [ ! -f "/etc/wireguard/${interface}.conf" ]; then
-        echo "Ignoring ${interface}"
+    if [ $noneFound -eq 1 ]; then
+      break
+
+    elif [ ! -f "/etc/wireguard/${interface}.conf" ]; then
+      echo "Ignoring ${interface}"
 
     elif [ -f "/etc/wireguard/${interface}.conf" ]; then
-
-
       echo "Removing isolation, if isolation is present for:" "$interface"
 
       sed -i "/PostUp = iptables -I FORWARD -i ${interface} -o ${interface} -j DROP/d" /etc/wireguard/"${interface}".conf
