@@ -10,7 +10,7 @@ on:
         default: 'true'
 
 env:
-  DOCKER_IMAGE: donaldzou/wgdashboard
+  DOCKER_IMAGE: dselen/wgdashboard
 
 jobs:
   docker_build:
@@ -30,7 +30,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and export (AMD64)
+      - name: Build and export (linux/amd64, linux/arm64, linux/arm/v7)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -38,6 +38,6 @@ jobs:
           tags: ${{ env.DOCKER_IMAGE }}:latest
           platforms: linux/amd64,linux/arm64,linux/arm/v7
       
-      - name: Install Docker Scout
+      - name: Inspect built Docker image.
         run: |
           docker inspect ${{ env.DOCKER_IMAGE }}:latest
