@@ -7,8 +7,12 @@ echo "------------------------- START ----------------------------"
 echo "Starting the WireGuard Dashboard Docker container."
 
 ensure_installation() {
+  [ -n "${isolate}" ] && [ -n "${global_dns}" ] && [ -n "${public_ip}" ] && echo "Variables are assigned!"
+
   # When using a custom directory to store the files, this part moves over and makes sure the installation continues.
   echo "Quick-installing..."
+
+  mkdir -p /dev/net && mknod /dev/net/tun c 10 200
 
   if [ ! -d "/data/db" ]; then
     echo "Creating database dir"
@@ -18,7 +22,7 @@ ensure_installation() {
   if [ ! -d "${WGDASH}/src/db" ]; then
     ln -s /data/db "${WGDASH}/src/db"
   fi
-  
+
   if [ ! -f "${config_file}" ]; then
     echo "Creating wg-dashboard.ini file"
     touch "${config_file}"

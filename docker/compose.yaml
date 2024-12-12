@@ -12,11 +12,13 @@ services:
       - 10086:10086/tcp
       - 51820:51820/udp
     volumes:
-      - conf:/etc/wireguard
+      - awg_conf:/etc/amnezia/amneziawg
+      - wg_conf:/etc/wireguard
       - data:/data
     cap_add:
       - NET_ADMIN
 
 volumes:
-  conf:
+  awg_conf:
+  wg_conf:
   data:

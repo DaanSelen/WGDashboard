@@ -1,42 +1,25 @@
-FROM golang:1.23 AS compiler
-WORKDIR /go
+# COMPILING STAGE
+FROM golang:alpine AS compiler
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git make bash build-essential \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-RUN git clone --depth=1 https://github.com/amnezia-vpn/amneziawg-tools.git && \
-    git clone --depth=1 https://github.com/amnezia-vpn/amneziawg-go.git
-RUN cd /go/amneziawg-tools/src && make
-
-RUN cd /go/amneziawg-go && \
-    go get -u ./... && \
-    go mod tidy && \
-    make && \
-    chmod +x /go/amneziawg-go/amneziawg-go /go/amneziawg-tools/src/wg /go/amneziawg-tools/src/wg-quick/linux.bash
-RUN echo "DONE AmneziaWG"
-
-### INTERMEDIATE STAGE
-FROM scratch AS bins
-COPY --from=compiler /go/amneziawg-go/amneziawg-go /amneziawg-go
-COPY --from=compiler /go/amneziawg-tools/src/wg /awg
-COPY --from=compiler /go/amneziawg-tools/src/wg-quick/linux.bash /awg-quick
+RUN apk add git gcc musl-dev && \
+    git clone https://github.com/amnezia-vpn/amneziawg-go /awg
+WORKDIR /awg
+RUN go mod download && \
+    go mod verify && \
+    go build -ldflags '-linkmode external -extldflags "-fno-PIC -static"' -v -o /usr/bin
 
 # FINAL STAGE
 FROM alpine:latest
 LABEL maintainer="dselen@nerthus.nl"
-
-COPY --from=bins /amneziawg-go /usr/bin/amneziawg-go
-COPY --from=bins /awg /usr/bin/awg
-COPY --from=bins /awg-quick /usr/bin/awg-quick
 
 # Declaring environment variables, change Peernet to an address you like, standard is a 24 bit subnet.
 ARG wg_net="10.0.0.1"
 ARG wg_port="51820"
 
 # Following ENV variables are changable on container runtime because /entrypoint.sh handles that. See compose.yaml for more info.
+# Global DNS set to Quad9 because I like them - Daan.
 ENV TZ="Europe/Amsterdam"
-ENV global_dns="1.1.1.1"
+ENV global_dns="9.9.9.9"
 ENV isolate="none"
 ENV public_ip="0.0.0.0"
 
@@ -44,8 +27,17 @@ ENV public_ip="0.0.0.0"
 RUN apk update \
   && apk add --no-cache bash git tzdata \
   iptables ip6tables openrc curl wireguard-tools \
-  sudo py3-psutil py3-bcrypt \
+  sudo py3-psutil py3-bcrypt gcompat \
   && apk upgrade
+
+# Setup AWG
+ARG AWGTOOLS_RELEASE="1.0.20240213"
+RUN mkdir -p /etc/amnezia/amneziawg && \
+    cd /usr/bin/ && \
+    wget https://github.com/amnezia-vpn/amneziawg-tools/releases/download/v${AWGTOOLS_RELEASE}/alpine-3.19-amneziawg-tools.zip && \
+    unzip -j alpine-3.19-amneziawg-tools.zip && \
+    chmod +x /usr/bin/awg /usr/bin/awg-quick
+COPY --from=compiler /usr/bin/amneziawg-go /usr/bin/amneziawg-go
 
 # Using WGDASH -- like wg_net functionally as a ARG command. But it is needed in entrypoint.sh so it needs to be exported as environment variable.
 ENV WGDASH=/opt/wireguarddashboard
