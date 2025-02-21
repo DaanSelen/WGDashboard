@@ -129,6 +129,9 @@ _installPythonVenv(){
 			arch)
 				{ echo "Python Virtual Environment is installed by default from version Python3.3"; printf "\n\n"; } &>> ./log/install.txt # https://wiki.archlinux.org/title/Python/Virtual_environment
 			;;
+			arch)
+				{ echo "Python Virtual Environment is installed by default from version Python3.3"; printf "\n\n"; } &>> ./log/install.txt # https://wiki.archlinux.org/title/Python/Virtual_environment
+			;;
 			*)
 				printf "[WGDashboard] %s Sorry, your OS is not supported. Currently the install script only support Debian-based, Red Hat-based OS. With experimental support for Alpine Linux.\n" "$heavy_crossmark"
 				printf "%s\n" "$helpMsg"
@@ -175,6 +178,9 @@ _installPythonPip(){
 			;;
 			alpine)
 				{ sudo apk update; sudo apk add py3-pip --no-cache; printf "\n\n"; } &>> ./log/install.txt
+			;;
+			arch)
+				{ sudo pacman -Syu python-pip; printf "\n\n"; } &>> ./log/install.txt
 			;;
 			arch)
 				{ sudo pacman -Syu python-pip; printf "\n\n"; } &>> ./log/install.txt
