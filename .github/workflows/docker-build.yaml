@@ -43,6 +43,11 @@ jobs:
           tags: ${{ env.DOCKER_IMAGE }}:latest
           platforms: linux/amd64,linux/arm64,linux/arm/v6,linux/arm/v7
 
+  docker_build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
       - name: Docker Scout
         id: docker-scout
         if: ${{ github.event_name == 'pull_request' }}
