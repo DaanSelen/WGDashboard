@@ -45,9 +45,10 @@ ENV TZ="Europe/Amsterdam" \
 
 # Doing package management operations, such as upgrading
 RUN apk update \
-  && apk add --no-cache bash git tzdata \
-    iptables ip6tables openrc curl wireguard-tools \
-    sudo py3-psutil py3-bcrypt \
+  && apk add --no-cache \
+    bash curl git ip6tables iptables-legacy \
+    libc6-compat openrc py3-bcrypt py3-psutil \
+    sudo tzdata wireguard-tools \
   && apk upgrade
 
 # Using WGDASH -- like wg_net functionally as a ARG command. But it is needed in entrypoint.sh so it needs to be exported as environment variable.
